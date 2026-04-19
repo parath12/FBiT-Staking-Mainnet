@@ -1,0 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+
+:root {
+  --brand-primary: #00E676;
+  --brand-secondary: #00C853;
+  --surface-dark: #060d19;
+  --surface-card: #0f1729;
+  --surface-elevated: #162033;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: rgba(148, 163, 184, 0.1);
+  --glow-green: rgba(0, 230, 118, 0.15);
+  --glow-purple: rgba(168, 85, 247, 0.15);
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--surface-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--surface-dark); }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Glass morphism */
+@layer components {
+  .glass {
+    background: rgba(15, 23, 41, 0.7);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+  }
+
+  .glass-card {
+    background: rgba(15, 23, 41, 0.7);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    @apply rounded-2xl p-6;
+    transition: all 0.3s ease;
+  }
+
+  .glass-card:hover {
+    border-color: rgba(0, 230, 118, 0.2);
+    box-shadow: 0 0 30px var(--glow-green);
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-display font-semibold text-surface-900 transition-all duration-300;
+    background: linear-gradient(135deg, #00E676, #00C853);
+    box-shadow: 0 4px 15px rgba(0, 230, 118, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 230, 118, 0.4);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-display font-semibold transition-all duration-300;
+    background: rgba(15, 23, 41, 0.8);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 20px var(--glow-green);
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl font-body transition-all duration-300;
+    background: rgba(6, 13, 25, 0.8);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .input-field:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px var(--glow-green);
+  }
+
+  .stat-value {
+    @apply font-display font-bold;
+    background: linear-gradient(135deg, #00E676, #06B6D4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #00E676, #A855F7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .network-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .network-badge.solana {
+    background: rgba(148, 85, 247, 0.15);
+    color: #A855F7;
+    border: 1px solid rgba(148, 85, 247, 0.3);
+  }
+
+  .network-badge.polygon {
+    background: rgba(130, 71, 229, 0.15);
+    color: #8247E5;
+    border: 1px solid rgba(130, 71, 229, 0.3);
+  }
+}
+
+/* Background mesh */
+.bg-mesh {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 600px 400px at 20% 20%, rgba(0, 230, 118, 0.04), transparent),
+    radial-gradient(ellipse 500px 500px at 80% 80%, rgba(168, 85, 247, 0.04), transparent),
+    radial-gradient(ellipse 400px 300px at 50% 50%, rgba(6, 182, 212, 0.03), transparent);
+}
+
+/* Grid pattern overlay */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Number input arrows hidden */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] { appearance: none; }
+
+/* Tooltip */
+@layer components {
+  .tooltip {
+    @apply relative;
+  }
+  .tooltip::after {
+    content: attr(data-tip);
+    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none transition-all duration-200;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+  }
+  .tooltip:hover::after {
+    @apply opacity-100;
+  }
+}
+
+/* Dynamic progress bar — width driven by --fill-pct CSS variable */
+.progress-fill {
+  width: var(--fill-pct, 0%);
+}

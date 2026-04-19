@@ -1,0 +1,48 @@
+# Claude AI local settings
+.claude/
+
+# Cloudflare tunnel binary
+cloudflared.exe
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+web/.next/
+web/out/
+web/.vercel/
+
+# Environment files (NEVER commit these)
+.env
+.env.local
+.env.*.local
+web/.env.local
+web/.env.testnet
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Solana build artifacts
+contracts/solana/target/
+contracts/solana/.anchor/
+
+# Hardhat / Polygon build artifacts
+contracts/polygon/artifacts/
+contracts/polygon/cache/
+contracts/polygon/node_modules/
+
+# TypeScript
+*.tsbuildinfo
+web/next-env.d.ts

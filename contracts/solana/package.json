@@ -1,0 +1,20 @@
+{
+  "name": "fbit-staking-solana",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "initialize": "ts-node scripts/initialize.ts",
+    "build": "anchor build",
+    "test": "anchor test"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.29.0",
+    "@solana/spl-token": "^0.4.6",
+    "@solana/web3.js": "^1.91.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
