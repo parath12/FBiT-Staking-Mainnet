@@ -101,13 +101,13 @@ export default function AdminPanel() {
   };
 
   const handleSetRewardRate = () => {
-    const n = parseInt(rewardRate);
+    const n = parseInt(rewardRate, 10);
     if (!n || n <= 0) return;
     run('rewardRate', () => contract.setRewardRate(n), `Reward rate updated to ${n / 100}%`);
   };
 
   const handleSetReferralRate = () => {
-    const n = parseInt(referralRate);
+    const n = parseInt(referralRate, 10);
     if (!n || n <= 0) return;
     run('referralRate', () => contract.setReferralRewardRate(n), `Referral rate updated to ${n / 100}%`);
   };
@@ -157,6 +157,7 @@ export default function AdminPanel() {
   };
 
   const handleSyncAllTiers = async () => {
+    if (!contract.isLive) { toast.error('Contract not configured.'); return; }
     if (platformStats.isRenounced) return;
     setProcessing('syncAllTiers');
     let successCount = 0;
@@ -178,7 +179,7 @@ export default function AdminPanel() {
   };
 
   const handleSetBurnBps = () => {
-    const bps = parseInt(burnBpsValue);
+    const bps = parseInt(burnBpsValue, 10);
     if (isNaN(bps) || bps < 0 || bps > 5000) return;
     run('burnBps', () => contract.setBurnBps(bps), `Burn rate updated to ${(bps / 100).toFixed(2)}%`);
   };

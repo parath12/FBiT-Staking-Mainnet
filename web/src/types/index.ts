@@ -22,7 +22,7 @@ export type NetworkConfig = {
 export const LOCK_PERIOD = { days: 30, label: '30 Days' };
 
 // Default display APY percent — actual effective APY is PoS-based and fetched from chain.
-export let DYNAMIC_APY = 60;
+export const DYNAMIC_APY = 60;
 
 // ===== REFERRAL LEVELS =====
 export const REFERRAL_LEVELS = [

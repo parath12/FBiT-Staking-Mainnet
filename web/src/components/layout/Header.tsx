@@ -41,7 +41,7 @@ function ReferralGateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div className="glass rounded-2xl border border-brand-500/20 w-full max-w-md p-6 animate-slide-up shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
@@ -174,7 +174,7 @@ export default function Header() {
     <>
     {showReferralGate && <ReferralGateModal network={selectedNetwork} onConfirm={handleReferralConfirmed} />}
     {showAdminConfirm && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
         <div className="glass rounded-2xl border border-accent-amber/20 w-full max-w-sm p-6 animate-slide-up shadow-2xl">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-accent-amber/20 flex items-center justify-center text-xl shrink-0">⚙</div>
@@ -334,9 +334,9 @@ export default function Header() {
               className="md:hidden p-2 rounded-lg hover:bg-white/5 transition-colors"
             >
               <div className="w-5 h-4 flex flex-col justify-between">
-                <span className={`block h-0.5 bg-text-secondary transition-all ${showMobileMenu ? 'rotate-45 translate-y-1.5' : ''}`} />
+                <span className={`block h-0.5 bg-text-secondary transition-all ${showMobileMenu ? 'rotate-45 translate-y-1.75' : ''}`} />
                 <span className={`block h-0.5 bg-text-secondary transition-all ${showMobileMenu ? 'opacity-0' : ''}`} />
-                <span className={`block h-0.5 bg-text-secondary transition-all ${showMobileMenu ? '-rotate-45 -translate-y-1.5' : ''}`} />
+                <span className={`block h-0.5 bg-text-secondary transition-all ${showMobileMenu ? '-rotate-45 -translate-y-1.75' : ''}`} />
               </div>
             </button>
           </div>

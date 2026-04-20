@@ -3,6 +3,12 @@
 @import "tailwindcss";
 @config "../../tailwind.config.js";
 
+@theme {
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+}
+
 :root {
   --brand-primary: #00E676;
   --brand-secondary: #00C853;

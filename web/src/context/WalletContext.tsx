@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '@/lib/store';
 import { getReferrerFromUrl } from '@/lib/utils';
 import { appKitModal } from '@/lib/reown';
@@ -36,9 +36,9 @@ const WalletContext = createContext<WalletContextType>({
 export const useWallet = () => useContext(WalletContext);
 
 // ── Admin address check ───────────────────────────────────────────────────────
-// SECURITY: Admin list is kept in a private env var (no NEXT_PUBLIC_ prefix).
-// It is never sent to the browser. The server-side check is a UI gate only;
-// the real enforcement is the smart contract's onlyOwner / onlyAuthority modifier.
+// SECURITY: Admin list is a UI gate only — real enforcement is the smart
+// contract's onlyOwner / onlyAuthority modifier. Set NEXT_PUBLIC_ADMIN_ADDRESSES
+// in .env.local as a comma-separated list of admin wallet addresses.
 const ADMIN_ADDRESSES = (process.env.NEXT_PUBLIC_ADMIN_ADDRESSES ?? '')
   .split(',')
   .map(a => a.trim())

@@ -1,15 +1,6 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-
-// ProgressBar sets width imperatively to avoid JSX inline-style linter warnings
-function ProgressBar({ pct, className }: { pct: number; className: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-  }, [pct]);
-  return <div ref={ref} className={`h-full rounded-full transition-all duration-500 ${className}`} />;
-}
 import toast from 'react-hot-toast';
 import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
@@ -23,6 +14,15 @@ import {
 } from '@/lib/utils';
 import { REFERRAL_LEVELS, TEAM_TARGET_TIERS } from '@/types';
 
+// ProgressBar sets width imperatively to avoid JSX inline-style linter warnings
+function ProgressBar({ pct, className }: { pct: number; className: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+  }, [pct]);
+  return <div ref={ref} className={`h-full rounded-full transition-all duration-500 ${className}`} />;
+}
+
 const POLL_INTERVAL_MS = 30_000; // 30 seconds
 
 export default function ReferralPanel() {
@@ -35,7 +35,7 @@ export default function ReferralPanel() {
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const prevReferralCount = useRef<number>(0);
 
-  const syncReferralData = useCallback(async (showToast = false) => {
+  const syncReferralData = useCallback(async () => {
     if (!address) return;
     setIsRefreshing(true);
     try {
@@ -88,7 +88,7 @@ export default function ReferralPanel() {
   };
 
   const handleRefresh = async () => {
-    await syncReferralData(true);
+    await syncReferralData();
     toast.success('Referral data refreshed!');
   };
 

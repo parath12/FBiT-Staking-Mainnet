@@ -168,7 +168,7 @@ export const useAppStore = create<AppState>()(
         const addr = get().walletAddress;
         if (!addr) return;
         set(state => {
-          const wd = state.walletStates[addr];
+          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
@@ -195,7 +195,7 @@ export const useAppStore = create<AppState>()(
         if (!addr) return;
         const now = Math.floor(Date.now() / 1000);
         set(state => {
-          const wd = state.walletStates[addr];
+          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
@@ -222,7 +222,7 @@ export const useAppStore = create<AppState>()(
         if (!addr) return;
         const now = Math.floor(Date.now() / 1000);
         set(state => {
-          const wd = state.walletStates[addr];
+          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
@@ -287,7 +287,7 @@ export const useAppStore = create<AppState>()(
         const addr = get().walletAddress;
         if (!addr) return;
         set(state => {
-          const wd = state.walletStates[addr];
+          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,

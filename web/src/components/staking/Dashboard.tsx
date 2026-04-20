@@ -159,7 +159,7 @@ export default function Dashboard() {
     } finally {
       setActionLoading(key, false);
     }
-  }, [stakes, contract, claimStakeReward, addTransaction, selectedNetwork, fetchTokenBalance]);
+  }, [stakes, contract, platformStats, claimStakeReward, addTransaction, selectedNetwork, fetchTokenBalance]);
 
   const handleCompound = useCallback(async (stakeId: number | string) => {
     const stake = stakes.find(s => s.id === stakeId);
@@ -221,7 +221,7 @@ export default function Dashboard() {
     } finally {
       setActionLoading(key, false);
     }
-  }, [stakes, contract, compoundStakeReward, addTransaction, selectedNetwork]);
+  }, [stakes, contract, platformStats, compoundStakeReward, addTransaction, selectedNetwork]);
 
   const handleUnstake = useCallback(async (stakeId: number | string) => {
     const stake = stakes.find(s => s.id === stakeId);
