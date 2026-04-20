@@ -65,11 +65,16 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, [address, fetchTokenBalance]);
 
-  // Pull platform stats and stakes on connect / network switch
+  // Pull platform stats + user data on connect/network-switch, then poll every 30 s
   useEffect(() => {
     if (!address) return;
     void contract.syncPlatformStats().catch(() => {});
     void contract.syncUserData().catch(() => {});
+    const id = setInterval(() => {
+      void contract.syncPlatformStats().catch(() => {});
+      void contract.syncUserData().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, selectedNetwork]);
 

@@ -116,6 +116,30 @@ export default function StakePanel() {
         network: selectedNetwork,
       });
 
+      // Immediately update referrer's local count (same-browser testing + instant feedback)
+      if (referrer) {
+        const { walletStates } = useAppStore.getState();
+        const refData = walletStates[referrer];
+        if (refData) {
+          const prevCount = refData.referralInfo?.totalReferrals ?? refData.userAccount?.referralCount ?? 0;
+          loadOnChainData(referrer, {
+            referralInfo: {
+              totalReferrals:       prevCount + 1,
+              totalReferralRewards: refData.referralInfo?.totalReferralRewards ?? 0,
+              referralLink:         refData.referralInfo?.referralLink ?? '',
+              referrals: [
+                ...(refData.referralInfo?.referrals ?? []),
+                { address: address!, level: 1, stakedAmount: stakeAmount, rewardEarned: 0, registeredAt: Math.floor(Date.now() / 1000) },
+              ],
+              chain: refData.referralInfo?.chain ?? [],
+            },
+            userAccount: refData.userAccount
+              ? { ...refData.userAccount, referralCount: (refData.userAccount.referralCount ?? 0) + 1 }
+              : undefined,
+          });
+        }
+      }
+
       // Refresh on-chain balance and confirmed stake list after TX lands
       void contract.syncUserData().catch(() => {});
       void fetchTokenBalance();

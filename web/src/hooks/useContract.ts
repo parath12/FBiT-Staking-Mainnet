@@ -127,7 +127,7 @@ export interface ContractHook {
 
 export function useContract(): ContractHook {
   const { address } = useWallet();
-  const { selectedNetwork, updatePlatformStats, platformStats, loadOnChainData } = useAppStore();
+  const { selectedNetwork, updatePlatformStats, loadOnChainData } = useAppStore();
 
   const config = NETWORK_CONFIG[selectedNetwork];
 
@@ -214,8 +214,10 @@ export function useContract(): ContractHook {
         if (userAccountResult.status === 'fulfilled' && userAccountResult.value) update.userAccount = userAccountResult.value;
         if (referralInfoResult.status === 'fulfilled' && referralInfoResult.value) {
           update.referralInfo = referralInfoResult.value;
-        } else if (referralInfoResult.status !== 'fulfilled' && update.userAccount) {
-          // referralInfo fetch failed — synthesize from userAccount so the count is never lost.
+        } else if (update.userAccount) {
+          // referralInfo fetch failed OR returned null — always synthesize from
+          // userAccount so the count is never lost (covers both RPC errors and
+          // cases where the contract returns null for an un-registered user).
           update.referralInfo = {
             totalReferrals:       update.userAccount.referralCount,
             totalReferralRewards: update.userAccount.totalReferralRewards,
