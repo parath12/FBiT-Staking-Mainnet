@@ -3,9 +3,10 @@
 /**
  * Solana FBiTStaking Anchor contract service
  *
- * Stake entry PDA is seeded with [b"stake", owner_pubkey, stakedAt_le_bytes].
- * The `stakedAt` timestamp stored in StakeEntry is the PDA seed, which lets
- * the client re-derive the correct PDA for claim / compound / unstake.
+ * Stake entry PDA is seeded with [b"stake", owner_pubkey, stakeId_le_bytes].
+ * stakeId = user_account.stake_count at the time of staking (monotonic counter).
+ * The `stakeId` stored in StakeEntry lets the client re-derive the PDA for
+ * claim / compound / unstake.
  *
  * All public methods throw on error — callers should catch.
  * Amount parameters are in token units (not lamports).
@@ -43,10 +44,10 @@ function userPda(owner: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([Buffer.from('user'), owner.toBuffer()], getProgramId());
 }
 
-function stakeEntryPda(owner: PublicKey, stakedAt: number): [PublicKey, number] {
-  const ts = new BN(stakedAt);
+function stakeEntryPda(owner: PublicKey, stakeId: number): [PublicKey, number] {
+  const id = new BN(stakeId);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('stake'), owner.toBuffer(), ts.toArrayLike(Buffer, 'le', 8)],
+    [Buffer.from('stake'), owner.toBuffer(), id.toArrayLike(Buffer, 'le', 8)],
     getProgramId()
   );
 }
@@ -259,8 +260,15 @@ export async function solanaStake(
     await solanaRegisterUser(referrer);
   }
 
-  const stakedAt = Math.floor(Date.now() / 1000);
-  const [stakeEntryAccPda] = stakeEntryPda(owner, stakedAt);
+  // Fetch current stake_count — this is the PDA seed for the new entry
+  const [userAccPdaForCount] = userPda(owner);
+  let stakeId = 0;
+  try {
+    const userAccData: any = await (program.account as any).userAccount.fetch(userAccPdaForCount);
+    stakeId = userAccData.stakeCount.toNumber();
+  } catch {}
+
+  const [stakeEntryAccPda] = stakeEntryPda(owner, stakeId);
 
   const stakeMint   = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
   const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
@@ -328,29 +336,20 @@ export async function solanaStake(
     .remainingAccounts(remainingAccounts)
     .rpc();
 
-  // Verify the actual on-chain stakedAt so future PDA derivations (claim/unstake)
-  // use the block timestamp the contract recorded, not the client-side estimate.
-  let actualStakedAt = stakedAt;
-  try {
-    const entry: any = await (program.account as any).stakeEntry.fetch(stakeEntryAccPda);
-    actualStakedAt = entry.stakedAt.toNumber();
-  } catch {
-    // If fetch fails (e.g. slight clock drift created a different PDA), fall back
-    // to client timestamp — the user will need to retry or re-stake.
-  }
-
-  return { txHash: tx, stakedAt: actualStakedAt };
+  // stakeId is the stake_count fetched before sending the tx — deterministic PDA seed.
+  // Store it so claim/compound/unstake can re-derive the correct PDA.
+  return { txHash: tx, stakedAt: stakeId };
 }
 
 export async function solanaClaimRewards(
-  _stakeId: number | string,
-  stakedAt: number
+  stakeId: number | string,
+  _stakedAt: number
 ): Promise<{ txHash: string; reward: number }> {
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
   const [userAccPda] = userPda(owner);
-  const [stakeEntryAccPda] = stakeEntryPda(owner, stakedAt);
+  const [stakeEntryAccPda] = stakeEntryPda(owner, Number(stakeId));
 
   // Read pending reward before claiming
   let reward = 0;
@@ -382,9 +381,9 @@ export async function solanaClaimRewards(
     }
   } catch {}
 
-  // IDL requires stakeEntryId (u64) = the stakedAt timestamp used as PDA seed
+  // IDL requires stakeEntryId (u64) = the stake_id used as PDA seed
   const tx = await (program.methods as any)
-    .claimRewards(new BN(stakedAt))
+    .claimRewards(new BN(Number(stakeId)))
     .accounts({
       platform:                   platPda,
       userAccount:                userAccPda,
@@ -403,14 +402,14 @@ export async function solanaClaimRewards(
 }
 
 export async function solanaCompoundRewards(
-  _stakeId: number | string,
-  stakedAt: number
+  stakeId: number | string,
+  _stakedAt: number
 ): Promise<{ txHash: string; reward: number }> {
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
   const [userAccPda] = userPda(owner);
-  const [stakeEntryAccPda] = stakeEntryPda(owner, stakedAt);
+  const [stakeEntryAccPda] = stakeEntryPda(owner, Number(stakeId));
 
   let reward = 0;
   try {
@@ -458,16 +457,25 @@ export async function solanaCompoundRewards(
   return { txHash: tx, reward };
 }
 
-export async function solanaUnstake(stakedAt: number): Promise<{ txHash: string }> {
+export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }> {
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
   const [userAccPda] = userPda(owner);
-  const [stakeEntryAccPda] = stakeEntryPda(owner, stakedAt);
+  const [stakeEntryAccPda] = stakeEntryPda(owner, stakeId);
 
-  const stakeMint = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
+  const stakeMint    = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
   const userTokenAcc = ata(stakeMint, owner);
   const stakeVault   = getStakeVault();
+
+  // Resolve admin stake account (authority's stake-mint ATA); fallback when renounced
+  let adminStakeAccount = userTokenAcc;
+  try {
+    const platform: any = await (program.account as any).platform.fetch(platPda);
+    if (!platform.isRenounced && platform.authority) {
+      adminStakeAccount = ata(stakeMint, new PublicKey(platform.authority.toString()));
+    }
+  } catch {}
 
   const tx = await (program.methods as any)
     .unstake()
@@ -477,6 +485,7 @@ export async function solanaUnstake(stakedAt: number): Promise<{ txHash: string 
       stakeEntry:       stakeEntryAccPda,
       userTokenAccount: userTokenAcc,
       stakeVault,
+      adminStakeAccount,
       owner,
       tokenProgram:     TOKEN_PROGRAM_ID,
     })
@@ -688,9 +697,10 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
     return (all as any[])
       .filter((e: any) => e.account.isActive)
       .map((e: any): StakeEntry => {
+        const stakeId  = e.account.stakeId.toNumber();
         const stakedAt = e.account.stakedAt.toNumber();
         return {
-          id: stakedAt,  // use stakedAt as unique ID for Solana stakes
+          id:              stakeId,  // stake_count — used as PDA seed for claim/compound/unstake
           amount:          fromLamports(e.account.amount),
           lockPeriodIndex: e.account.lockPeriodIndex,
           stakedAt,

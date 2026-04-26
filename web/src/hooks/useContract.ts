@@ -174,7 +174,7 @@ export function useContract(): ContractHook {
 
   const unstake = useCallback(
     (stakeId: number | string, stakedAt: number) => {
-      if (selectedNetwork === 'solana') return solanaUnstake(stakedAt);
+      if (selectedNetwork === 'solana') return solanaUnstake(Number(stakeId));
       return polygonUnstake(stakeId);
     },
     [selectedNetwork]
