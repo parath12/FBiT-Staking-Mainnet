@@ -364,37 +364,66 @@ export async function polygonGetUserAccount(address: string): Promise<UserAccoun
   }
 }
 
+// Commission rates in basis points per level (mirrors contract REFERRAL_PERCENTAGES)
+const REFERRAL_LEVEL_BPS = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800] as const;
+const MAX_REFERRAL_DEPTH   = 10;
+const MAX_REFERRAL_ENTRIES = 100; // cap total entries to avoid excessive RPC calls
+
 export async function polygonGetReferralInfo(address: string): Promise<ReferralInfo | null> {
   try {
     const contract = getReadOnlyStakingContract();
 
-    // Fetch user data first — this is the authoritative referral count source.
+    // Authoritative counts come from on-chain user struct.
     const user = await contract.users(address);
     const totalReferrals       = Number(user.referralCount);
     const totalReferralRewards = fromWei(user.totalReferralRewards);
 
-    // Try to fetch the referral address list separately; a failure here should
-    // NOT discard the count we already have.
+    // BFS across up to MAX_REFERRAL_DEPTH levels.
+    // parentAddresses = addresses whose direct referrals form the next level.
     let referrals: ReferralEntry[] = [];
     try {
-      const referralAddrs = await contract.getReferrals(address);
-      const addrs = referralAddrs as string[];
-      const refUserResults = await Promise.allSettled(
-        addrs.map((a: string) => contract.users(a))
-      );
-      referrals = addrs.map((refAddr, i) => {
-        const res = refUserResults[i];
-        const ru  = res.status === 'fulfilled' ? res.value : null;
-        return {
-          address:      refAddr,
-          level:        1,
-          stakedAmount: ru ? fromWei(ru.totalStaked) : 0,
-          rewardEarned: 0,
-          registeredAt: ru ? Number(ru.registeredAt) : 0,
-        };
-      });
+      let parentAddresses: string[] = [address];
+
+      for (let lvl = 1; lvl <= MAX_REFERRAL_DEPTH && referrals.length < MAX_REFERRAL_ENTRIES; lvl++) {
+        // Collect all child addresses from every parent at this level
+        const childAddresses: string[] = [];
+        await Promise.allSettled(
+          parentAddresses.map(async (addr) => {
+            try {
+              const addrs = await contract.getReferrals(addr);
+              childAddresses.push(...(addrs as string[]));
+            } catch {}
+          })
+        );
+
+        if (childAddresses.length === 0) break;
+
+        // Cap to remaining slots
+        const slice    = childAddresses.slice(0, MAX_REFERRAL_ENTRIES - referrals.length);
+        const levelBps = REFERRAL_LEVEL_BPS[lvl - 1];
+
+        const userResults = await Promise.allSettled(
+          slice.map((a: string) => contract.users(a))
+        );
+
+        slice.forEach((refAddr, i) => {
+          const res = userResults[i];
+          const ru  = res.status === 'fulfilled' ? res.value : null;
+          const stakedAmount = ru ? fromWei(ru.totalStaked) : 0;
+          referrals.push({
+            address:      refAddr,
+            level:        lvl,
+            stakedAmount,
+            rewardEarned: stakedAmount * levelBps / 10_000,
+            registeredAt: ru ? Number(ru.registeredAt) : 0,
+          });
+        });
+
+        if (referrals.length >= MAX_REFERRAL_ENTRIES) break;
+        parentAddresses = childAddresses;
+      }
     } catch {
-      // getReferrals() failed — return count-only result with empty list.
+      // Referral tree fetch failed — return count-only result with empty list.
     }
 
     return {

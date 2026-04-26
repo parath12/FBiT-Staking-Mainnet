@@ -59,7 +59,12 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     /// @dev Dead address — tokens sent here are permanently removed from circulation
     address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
+    /// @dev Read via getReferralPercentages() — stored in code, not storage (gas-efficient).
     uint256[10] public REFERRAL_PERCENTAGES = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
+
+    function getReferralPercentages() external pure returns (uint256[10] memory) {
+        return [uint256(25), 50, 125, 150, 200, 325, 350, 425, 550, 800];
+    }
 
     /// @notice Single lock period: 30 days.
     uint256 public constant LOCK_PERIOD = 30;
@@ -124,6 +129,8 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     IERC20 public stakeToken;
     IERC20 public rewardToken;
 
+    /// @dev Configuration display variables — read by frontend/UI only.
+    ///      Not used in any on-chain reward or referral calculations.
     uint256 public rewardRate;
     uint256 public referralRewardRate;
     uint256 public totalStaked;
@@ -191,6 +198,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     event RewardsCompounded(address indexed user, uint256 indexed stakeId, uint256 amount, uint256 fee, uint256 newStake, uint256 timestamp);
     event TokensUnstaked(address indexed user, uint256 indexed stakeId, uint256 amount, uint256 fee, uint256 timestamp);
     event ReferralReward(address indexed staker, address indexed referrer, uint256 amount, uint8 level);
+    event ReferralSkipped(address indexed staker, address indexed referrer, uint8 level, uint256 needed, uint256 poolBalance);
     event RewardRateUpdated(uint256 newRate);
     event ReferralRateUpdated(uint256 newRate);
     event AnnualEmissionUpdated(uint256 newEmission);
@@ -781,7 +789,9 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
         uint256 intervals = elapsed / CLAIM_INTERVAL;
         if (intervals == 0) return 0;
 
-        uint256 effectiveApy = getEffectiveAPY();
+        // Use APY locked at stake time — predictable returns for the user.
+        // Falls back to live APY only for legacy stakes where apy was not stored.
+        uint256 effectiveApy = entry.apy > 0 ? entry.apy : getEffectiveAPY();
         return (entry.amount * effectiveApy * intervals) / (730 * BASIS_POINTS);
     }
 
@@ -820,16 +830,23 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     }
 
     function _processReferralRewards(address _staker, uint256 _amount) internal {
+        // Memory array — avoids 10 storage SLOADs (cheaper gas on every stake)
+        uint256[10] memory pcts = [uint256(25), 50, 125, 150, 200, 325, 350, 425, 550, 800];
         address cur = referralChain[_staker];
         for (uint8 i = 0; i < MAX_REFERRAL_LEVELS; i++) {
             if (cur == address(0)) break;
             if (!users[cur].isBlocked) {
-                uint256 reward = (_amount * REFERRAL_PERCENTAGES[i]) / BASIS_POINTS;
-                if (reward > 0 && rewardPoolBalance >= reward) {
-                    users[cur].totalReferralRewards += reward;
-                    rewardPoolBalance               -= reward;
-                    rewardToken.safeTransfer(cur, reward);
-                    emit ReferralReward(_staker, cur, reward, i);
+                uint256 reward = (_amount * pcts[i]) / BASIS_POINTS;
+                if (reward > 0) {
+                    if (rewardPoolBalance >= reward) {
+                        users[cur].totalReferralRewards += reward;
+                        rewardPoolBalance               -= reward;
+                        rewardToken.safeTransfer(cur, reward);
+                        emit ReferralReward(_staker, cur, reward, i);
+                    } else {
+                        // Pool insufficient — log it so frontend/admin can see
+                        emit ReferralSkipped(_staker, cur, i, reward, rewardPoolBalance);
+                    }
                 }
             }
             cur = referralChain[cur];

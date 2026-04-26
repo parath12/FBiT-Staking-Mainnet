@@ -262,22 +262,70 @@ export async function solanaStake(
   const stakedAt = Math.floor(Date.now() / 1000);
   const [stakeEntryAccPda] = stakeEntryPda(owner, stakedAt);
 
-  const stakeMint = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
+  const stakeMint   = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
+  const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const userTokenAcc = ata(stakeMint, owner);
   const stakeVault   = getStakeVault();
+  const rewardVault  = getRewardVault();
+
+  // Resolve admin stake account (authority's stake-mint ATA)
+  let adminStakeAccount = userTokenAcc; // fallback (unused when renounced)
+  try {
+    const platform: any = await (program.account as any).platform.fetch(platPda);
+    if (!platform.isRenounced && platform.authority) {
+      const authorityKey = new PublicKey(platform.authority.toString());
+      adminStakeAccount = ata(stakeMint, authorityKey);
+    }
+  } catch {}
+
+  // Build remaining_accounts: walk the referral chain up to 10 levels.
+  // Each level contributes 2 accounts: [UserAccount PDA (writable), reward ATA (writable)].
+  const remainingAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+  try {
+    // The staker's own account already has referrer stored on-chain (set during registerUser).
+    const userAccData: any = await (program.account as any).userAccount.fetch(userAccPda);
+    let currentReferrerKey: PublicKey | null = userAccData.referrer
+      ? new PublicKey(userAccData.referrer.toString())
+      : null;
+
+    for (let lvl = 0; lvl < 10 && currentReferrerKey !== null; lvl++) {
+      const [referrerUserPda] = userPda(currentReferrerKey);
+      const referrerRewardAta = ata(rewardMint, currentReferrerKey);
+
+      remainingAccounts.push(
+        { pubkey: referrerUserPda, isSigner: false, isWritable: true },
+        { pubkey: referrerRewardAta, isSigner: false, isWritable: true },
+      );
+
+      // Fetch next ancestor's key (for the next loop iteration)
+      try {
+        const refData: any = await (program.account as any).userAccount.fetch(referrerUserPda);
+        currentReferrerKey = refData.referrer
+          ? new PublicKey(refData.referrer.toString())
+          : null;
+      } catch {
+        break; // ancestor account not found — chain ends here
+      }
+    }
+  } catch {
+    // Chain fetch failed — proceed without referral rewards (safe degradation)
+  }
 
   const tx = await (program.methods as any)
-    .stake(toLamports(amount))
+    .stake(toLamports(amount), 0)
     .accounts({
       platform:         platPda,
       userAccount:      userAccPda,
       stakeEntry:       stakeEntryAccPda,
       userTokenAccount: userTokenAcc,
       stakeVault,
+      adminStakeAccount,
+      rewardVault,
       owner,
       tokenProgram:     TOKEN_PROGRAM_ID,
       systemProgram:    SystemProgram.programId,
     })
+    .remainingAccounts(remainingAccounts)
     .rpc();
 
   // Verify the actual on-chain stakedAt so future PDA derivations (claim/unstake)

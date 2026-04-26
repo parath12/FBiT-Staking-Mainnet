@@ -52,6 +52,8 @@ export const IDL = {
         { name: 'stakeEntry', isMut: true, isSigner: false },
         { name: 'userTokenAccount', isMut: true, isSigner: false },
         { name: 'stakeVault', isMut: true, isSigner: false },
+        { name: 'adminStakeAccount', isMut: true, isSigner: false },
+        { name: 'rewardVault', isMut: true, isSigner: false },
         { name: 'owner', isMut: true, isSigner: true },
         { name: 'tokenProgram', isMut: false, isSigner: false },
         { name: 'systemProgram', isMut: false, isSigner: false },

@@ -3,7 +3,7 @@ seeds = false
 skip-lint = false
 
 [programs.mainnet]
-fbit_staking = ""
+fbit_staking = "8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp"
 
 [registry]
 url = "https://api.apr.dev"

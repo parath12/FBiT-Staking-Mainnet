@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer, Mint, Burn};
 
-declare_id!("11111111111111111111111111111111");
+declare_id!("8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp");
 
 // ===== CONSTANTS =====
 pub const MAX_REFERRAL_LEVELS: usize = 10;
@@ -126,6 +126,7 @@ pub mod fbit_staking {
         user.registered_at          = Clock::get()?.unix_timestamp;
         user.team_size              = 0;
         user.team_total_staked      = 0;
+        user.stake_count            = 0;
         user.bump                   = ctx.bumps.user_account;
 
         if referrer.is_some() && ctx.accounts.referrer_account.owner != Pubkey::default() {
@@ -147,7 +148,7 @@ pub mod fbit_staking {
     // STAKING  (1 % platform fee on every operation)
     // ─────────────────────────────────────────────────────────────────────────────
 
-    pub fn stake(ctx: Context<Stake>, amount: u64, lock_period_index: u8) -> Result<()> {
+    pub fn stake<'info>(ctx: Context<'_, '_, '_, 'info, Stake<'info>>, amount: u64, lock_period_index: u8) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(!ctx.accounts.user_account.is_blocked, StakingError::UserBlocked);
         require!(amount > 0, StakingError::InvalidAmount);
@@ -188,6 +189,7 @@ pub mod fbit_staking {
         se.total_claimed     = 0;
         se.is_active         = true;
         se.apy               = apy;
+        se.stake_id          = ctx.accounts.user_account.stake_count;
         se.bump              = ctx.bumps.stake_entry;
 
         ctx.accounts.user_account.total_staked =
@@ -197,10 +199,90 @@ pub mod fbit_staking {
             ctx.accounts.user_account.team_total_staked.checked_add(staked_amount).unwrap();
         ctx.accounts.platform.total_staked =
             ctx.accounts.platform.total_staked.checked_add(staked_amount).unwrap();
+        ctx.accounts.user_account.stake_count =
+            ctx.accounts.user_account.stake_count.checked_add(1).unwrap();
 
-        if let Some(ref_key) = referrer {
-            let ref_reward = staked_amount.checked_mul(ref_rate).unwrap().checked_div(10_000).unwrap();
-            emit!(ReferralReward { staker: ctx.accounts.owner.key(), referrer: ref_key, amount: ref_reward, level: 0 });
+        // ── 10-level referral rewards via remaining_accounts ─────────────────────
+        // remaining_accounts layout: pairs of [UserAccount PDA (mut), reward ATA (mut)]
+        // pair index 0 = Level 1 (direct referrer), index 1 = Level 2, …, index 9 = Level 10.
+        if !ctx.remaining_accounts.is_empty() && ref_rate > 0 {
+            let remaining        = ctx.remaining_accounts;
+            let mut cur_referrer = ctx.accounts.user_account.referrer;
+            let bump             = ctx.accounts.platform.bump;
+            let seeds            = &[b"platform".as_ref(), &[bump]];
+            let signer           = &[&seeds[..]];
+            // Pre-extract these so they share the same 'info lifetime as remaining_accounts.
+            let reward_vault_ai  = ctx.accounts.reward_vault.to_account_info();
+            let token_program_ai = ctx.accounts.token_program.to_account_info();
+            let platform_ai      = ctx.accounts.platform.to_account_info();
+
+            for level in 0..MAX_REFERRAL_LEVELS {
+                let pair_start = level * 2;
+                if pair_start + 1 >= remaining.len() { break; }
+                let Some(expected_key) = cur_referrer else { break; };
+
+                let ref_user_ai   = &remaining[pair_start];
+                let ref_reward_ai = &remaining[pair_start + 1];
+
+                // Deserialize referrer's UserAccount to read owner/blocked/next-referrer.
+                let (user_owner, is_blocked, next_ref): (Pubkey, bool, Option<Pubkey>) = {
+                    let data = ref_user_ai.try_borrow_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut slice: &[u8] = &data[8..]; // skip 8-byte discriminator
+                    match UserAccount::deserialize(&mut slice) {
+                        Ok(u) => (u.owner, u.is_blocked, u.referrer),
+                        Err(_) => break, // not a valid UserAccount — stop chain
+                    }
+                };
+
+                // Always advance regardless of whether we pay this level
+                cur_referrer = next_ref;
+
+                if user_owner != expected_key { continue; }
+
+                let level_bps  = REFERRAL_PERCENTAGES[level];
+                let ref_reward = staked_amount.checked_mul(level_bps).unwrap().checked_div(10_000).unwrap();
+
+                if is_blocked || ref_reward == 0 || ctx.accounts.platform.reward_pool_balance < ref_reward {
+                    continue;
+                }
+
+                // Transfer reward_vault → referrer's reward ATA
+                token::transfer(CpiContext::new_with_signer(
+                    token_program_ai.clone(),
+                    Transfer {
+                        from:      reward_vault_ai.clone(),
+                        to:        ref_reward_ai.clone(),
+                        authority: platform_ai.clone(),
+                    },
+                    signer,
+                ), ref_reward)?;
+
+                // Update total_referral_rewards in the UserAccount on-chain
+                {
+                    let mut data = ref_user_ai.try_borrow_mut_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut updated = {
+                        let mut slice: &[u8] = &data[8..];
+                        UserAccount::deserialize(&mut slice)
+                            .map_err(|_| error!(StakingError::Unauthorized))?
+                    };
+                    updated.total_referral_rewards = updated.total_referral_rewards
+                        .checked_add(ref_reward).unwrap();
+                    updated.serialize(&mut &mut data[8..])
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                }
+
+                ctx.accounts.platform.reward_pool_balance =
+                    ctx.accounts.platform.reward_pool_balance.checked_sub(ref_reward).unwrap();
+
+                emit!(ReferralReward {
+                    staker:   ctx.accounts.owner.key(),
+                    referrer: expected_key,
+                    amount:   ref_reward,
+                    level:    level as u8,
+                });
+            }
         }
         emit!(TokensStaked { user: ctx.accounts.owner.key(), amount: staked_amount, fee, lock_period: lock_days, unlock_at, apy });
         Ok(())
@@ -401,6 +483,8 @@ pub mod fbit_staking {
 
         ctx.accounts.user_account.total_staked =
             ctx.accounts.user_account.total_staked.checked_add(compound_amount).unwrap();
+        ctx.accounts.user_account.team_total_staked =
+            ctx.accounts.user_account.team_total_staked.checked_add(compound_amount).unwrap();
         ctx.accounts.user_account.total_rewards_earned =
             ctx.accounts.user_account.total_rewards_earned.checked_add(compound_amount).unwrap();
 
@@ -640,10 +724,11 @@ pub struct UserAccount {
     pub registered_at:          i64,
     pub team_size:              u64,
     pub team_total_staked:      u64,
+    pub stake_count:            u64,  // monotonic counter — used as stake PDA seed (prevents same-block collision)
     pub bump:                   u8,
 }
-// space: 8 + 32 + 8+8+8 + 33 + 8 + 1 + 8 + 8+8 + 1 = 131
-pub const USER_ACCOUNT_SPACE: usize = 140;   // +9 bytes safety padding
+// space: 8 + 32 + 8+8+8 + 33 + 8 + 1 + 8 + 8+8+8 + 1 = 139
+pub const USER_ACCOUNT_SPACE: usize = 152;   // +13 bytes safety padding
 
 #[account]
 pub struct StakeEntry {
@@ -656,6 +741,7 @@ pub struct StakeEntry {
     pub total_claimed:     u64,
     pub is_active:         bool,
     pub apy:               u64,
+    pub stake_id:          u64,  // stored so claim/compound/unstake can re-derive the PDA seed
     pub bump:              u8,
 }
 
@@ -710,8 +796,8 @@ pub struct Stake<'info> {
     pub platform:           Account<'info, Platform>,
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
     pub user_account:       Account<'info, UserAccount>,
-    #[account(init, payer = owner, space = 8+32+8+1+8+8+8+8+1+8+1,
-        seeds = [b"stake", owner.key().as_ref(), &Clock::get().unwrap().unix_timestamp.to_le_bytes()], bump)]
+    #[account(init, payer = owner, space = 8+32+8+1+8+8+8+8+1+8+8+1,
+        seeds = [b"stake", owner.key().as_ref(), &user_account.stake_count.to_le_bytes()], bump)]
     pub stake_entry:        Account<'info, StakeEntry>,
     #[account(mut,
         constraint = user_token_account.owner == owner.key() @ StakingError::InvalidUserAccount,
@@ -722,13 +808,19 @@ pub struct Stake<'info> {
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub stake_vault:        Account<'info, TokenAccount>,
     #[account(mut,
-        constraint = admin_stake_account.owner == platform.authority @ StakingError::InvalidAdminAccount,
+        constraint = (platform.is_renounced || admin_stake_account.owner == platform.authority) @ StakingError::InvalidAdminAccount,
         constraint = admin_stake_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub admin_stake_account: Account<'info, TokenAccount>,
+    /// Reward vault — pays multi-level referral rewards on stake (via remaining_accounts).
+    #[account(mut,
+        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
+        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub reward_vault: Account<'info, TokenAccount>,
     #[account(mut)]
     pub owner:              Signer<'info>,
     pub token_program:      Program<'info, Token>,
     pub system_program:     Program<'info, System>,
+    // remaining_accounts: pairs of [UserAccount PDA (mut), reward ATA (mut)] — up to 10 levels
 }
 
 #[derive(Accounts)]
@@ -739,7 +831,7 @@ pub struct ClaimRewards<'info> {
     pub user_account:        Account<'info, UserAccount>,
     // PDA seed verification: proves this entry was created via stake() for this owner
     #[account(mut,
-        seeds = [b"stake", owner.key().as_ref(), &stake_entry.staked_at.to_le_bytes()],
+        seeds = [b"stake", owner.key().as_ref(), &stake_entry.stake_id.to_le_bytes()],
         bump = stake_entry.bump,
         has_one = owner @ StakingError::InvalidUserAccount)]
     pub stake_entry:         Account<'info, StakeEntry>,
@@ -777,7 +869,7 @@ pub struct CompoundRewards<'info> {
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
     pub user_account:         Account<'info, UserAccount>,
     #[account(mut,
-        seeds = [b"stake", owner.key().as_ref(), &stake_entry.staked_at.to_le_bytes()],
+        seeds = [b"stake", owner.key().as_ref(), &stake_entry.stake_id.to_le_bytes()],
         bump = stake_entry.bump,
         has_one = owner @ StakingError::InvalidUserAccount)]
     pub stake_entry:          Account<'info, StakeEntry>,
@@ -811,7 +903,7 @@ pub struct Unstake<'info> {
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
     pub user_account:        Account<'info, UserAccount>,
     #[account(mut,
-        seeds = [b"stake", owner.key().as_ref(), &stake_entry.staked_at.to_le_bytes()],
+        seeds = [b"stake", owner.key().as_ref(), &stake_entry.stake_id.to_le_bytes()],
         bump = stake_entry.bump,
         has_one = owner @ StakingError::InvalidUserAccount)]
     pub stake_entry:         Account<'info, StakeEntry>,
@@ -824,7 +916,7 @@ pub struct Unstake<'info> {
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub stake_vault:         Account<'info, TokenAccount>,
     #[account(mut,
-        constraint = admin_stake_account.owner == platform.authority @ StakingError::InvalidAdminAccount,
+        constraint = (platform.is_renounced || admin_stake_account.owner == platform.authority) @ StakingError::InvalidAdminAccount,
         constraint = admin_stake_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub admin_stake_account: Account<'info, TokenAccount>,
     pub owner:               Signer<'info>,

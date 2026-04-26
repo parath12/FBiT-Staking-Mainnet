@@ -73,10 +73,10 @@ export default function ReferralPanel() {
   const nextTier = getNextTeamTargetTier(teamStats.teamSize, teamStats.teamTotalStaked);
 
   const referralLink = address ? generateReferralLink(address) : '';
-  const totalReferrals = referralInfo?.totalReferrals ?? 0;
-  const totalRewards = userAccount?.totalReferralRewards ?? 0;
+  const totalReferrals  = referralInfo?.totalReferrals ?? 0;
+  const totalRewards    = userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards ?? 0;
   const activeReferrals = referralInfo?.referrals.filter(r => r.stakedAmount > 0).length ?? 0;
-  const pendingRewards = 0;
+  const teamSize        = teamStats.teamSize;
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(referralLink);
@@ -154,10 +154,10 @@ export default function ReferralPanel() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total Referrals', value: totalReferrals, color: 'gradient-text' },
-          { label: 'Active',          value: activeReferrals, color: 'text-brand-400' },
+          { label: 'Total Referrals', value: totalReferrals,            color: 'gradient-text' },
+          { label: 'Active',          value: activeReferrals,            color: 'text-brand-400' },
           { label: 'Total Earned',    value: formatNumber(totalRewards), color: 'text-accent-cyan' },
-          { label: 'Pending',         value: formatNumber(pendingRewards), color: 'text-accent-amber' },
+          { label: 'Team Size',       value: teamSize,                   color: 'text-accent-amber' },
         ].map(({ label, value, color }) => (
           <div key={label} className="glass-card text-center">
             <p className="text-text-muted text-xs font-display uppercase tracking-wider">{label}</p>

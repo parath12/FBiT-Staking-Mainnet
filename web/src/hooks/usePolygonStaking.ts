@@ -93,7 +93,7 @@ export function usePolygonStaking() {
       if (!approved) return { success: false, txHash: '', message: 'Token approval failed' };
 
       const contract = await getContract(true);
-      const tx = await contract.stake(amountWei, lockPeriodIndex);
+      const tx = await contract.stake(amountWei);
       const receipt = await tx.wait();
       return { success: true, txHash: receipt.hash, message: `Staked ${amount} FBiT successfully!` };
     } catch (error: any) {
