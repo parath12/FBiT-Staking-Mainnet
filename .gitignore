@@ -20,6 +20,15 @@ web/.vercel/
 .env.*.local
 web/.env.local
 web/.env.testnet
+web/.env.mainnet
+contracts/polygon/.env
+
+# Solana keypair files (contain private keys)
+*.json.key
+id.json
+*-keypair.json
+deploy-keypair.json
+contracts/solana/wallet.json
 
 # Logs
 npm-debug.log*
